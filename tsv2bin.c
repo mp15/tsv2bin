@@ -1,9 +1,19 @@
 /*
- * Genotype TSV to Binary Format converter
+ * Genotype TSV to GTypeX Binary Format converter
  *
- * Copyright Genome Research Limited 2012.
- * All rights reserved.
- * Work in progress, must be released under open license when complete.
+ * Copyright (c) Genome Research Limited 2012, 2013.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
  * Author: Martin Pollard
  *         <mp15@sanger.ac.uk>
@@ -146,9 +156,59 @@ struct snp_data {
     int32_t chr;
     int32_t pos;
     char* snpid;
+    char ref;
+    char alt;
     struct snp_data* next;
 };
 
+const char* cunning_convert(int input, char ref)
+{
+    const char* n[] = {"./.","./.","./.","./.","./.","./.","./.","./.","./.","./."};
+    const char* a[] = {"0/0","0/1","0/1","0/1","1/1","./.","./.","1/1","./.","1/1"};
+    const char* t[] = {"1/1","./.","./.","0/1","1/1","./.","0/1","1/1","0/1","0/0"};
+    const char* g[] = {"1/1","./.","0/1","./.","1/1","0/1","./.","0/0","0/1","1/1"};
+    const char* c[] = {"1/1","0/1","./.","./.","0/0","0/1","0/1","1/1","./.","1/1"};
+    const char** table = n;
+
+    switch (ref) {
+        case 'A':
+	table = a;
+        break;
+        case 'T':
+        table = t;
+        break;
+        case 'G':
+        table = g;
+        break;
+        case 'C':
+        table = c;
+        break;
+	default:
+	table = n;
+    }
+    return table[input];
+}
+
+/* Writes binary genotype data to specified FILE */
+void write_vcf(struct binary_format* bin_data, FILE* output_file, char** snplist, char* snpref, char* snpalt) {
+    // Write header
+    fprintf(output_file, "##fileformat=VCFv4.1\n"
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO");
+    // Write sample names
+    for (int s = 0; s < bin_data->num_samples; ++s) {
+        fprintf(output_file,"\t%s", bin_data->sample[s].sample_name);
+    }
+    // Write end of header
+    fprintf(output_file, "\n");
+    // Write variant data
+    for (int i = 0; i < bin_data->num_sites; ++i) {
+        fprintf(output_file, "%s\t%d\t%s\t%c\t%c\t.\t.\t.", bin_data->chrom_strings[bin_data->chrArray[i]].chrom_name, bin_data->posArray[i], snplist[i], snpref[i], snpalt[i]);
+        for (int j = 0; j < bin_data->num_samples; ++j) {
+            fprintf(output_file, "\t%s", cunning_convert(bin_data->sample[j].gList[i], snpref[i]));
+        }
+	fprintf(output_file, "\n");
+    }
+}
 
 /* Writes binary genotype data to specified FILE */
 void write_binary_gt(struct binary_format* bin_data, FILE* output_file) {
@@ -257,7 +317,7 @@ void insertSNPSorted(struct snp_data** snplist, struct snp_data* insert)
  * Information from the map is then used to populate the chromosome dictionary and
  * header information in the binary structure.
  */
-int parse_map(struct binary_format* bin_data, FILE* map_file, char*** snplist) {
+int parse_map(struct binary_format* bin_data, FILE* map_file, char*** snplist, char**reflist, char**altlist) {
     char* line = NULL;
     size_t length = 0;
     struct fixed_chrom_string* chrom_list = NULL;
@@ -280,6 +340,8 @@ int parse_map(struct binary_format* bin_data, FILE* map_file, char*** snplist) {
         int chr = -1;
         int pos = -1;
         char* snpid = NULL;
+        char ref = '\0';
+        char alt = '\0';
         while (token != NULL && rowpos < 4) {
             switch (rowpos) {
                 case 0: // chromosome
@@ -293,6 +355,12 @@ int parse_map(struct binary_format* bin_data, FILE* map_file, char*** snplist) {
                 case 3: // coordinates within chromosome
                     pos = atoi(token);
                     break;
+                case 4:
+                    ref = token[0];
+                    break;
+                case 5:
+                    alt = token[1];
+                    break;
             }
             ++rowpos;
             token = strsep(&field, "\t");
@@ -303,6 +371,8 @@ int parse_map(struct binary_format* bin_data, FILE* map_file, char*** snplist) {
             snp->snpid = snpid;
             snp->pos = pos;
             snp->chr = chr;
+            snp->ref = ref;
+            snp->alt = alt;
             snp->next = NULL;
             insertSNPSorted(&first, snp);
             snpcount++;
@@ -333,17 +403,23 @@ int parse_map(struct binary_format* bin_data, FILE* map_file, char*** snplist) {
     bin_data->chrArray = (int32_t*)calloc(bin_data->num_sites, sizeof(int32_t));
     bin_data->posArray = (int32_t*)calloc(bin_data->num_sites, sizeof(int32_t));
     char** snpNames = (char**)calloc(bin_data->num_sites+1, sizeof(char*)); // +1 so we can use a NULL pointer as terminator
+    char* snpRef = (char*)calloc(bin_data->num_sites, sizeof(char));
+    char* snpAlt = (char*)calloc(bin_data->num_sites, sizeof(char));
     struct snp_data* curr = first;
     for (int i = 0; i < snpcount; ++i) {
         bin_data->chrArray[i] = curr->chr;
         bin_data->posArray[i] = curr->pos;
         snpNames[i] = curr->snpid;
+        snpRef[i] = curr->ref;
+        snpAlt[i] = curr->alt;
         struct snp_data* prev = curr;
         curr = curr->next;
         free(prev);
     }
     
     *snplist = snpNames;
+    *reflist = snpRef;
+    *altlist = snpAlt;
 
     return 0;
 }
@@ -351,7 +427,7 @@ int parse_map(struct binary_format* bin_data, FILE* map_file, char*** snplist) {
 int getChrPosArray(char** snplist, const char* snpid){
     char** iter = snplist;
     int counter = 0;
-    while (iter != NULL)
+    while (*iter != NULL)
     {
         if (strcmp(snpid, *iter) == 0)
             return counter;
@@ -482,9 +558,10 @@ int main (int argc, char *argv[])
     char* file_to_parse = NULL;
     char* file_read = NULL;
     char* file_map = NULL;
+    char* output_type = NULL;
     
     // parse inputs
-    const char* opts = "i:o:m:";
+    const char* opts = "i:o:m:t:";
     const struct option longopts[] = {{NULL, 0, NULL, 0},};
     int option_index = 0;
 
@@ -500,30 +577,35 @@ int main (int argc, char *argv[])
             case 'o':
                 file_read = optarg;
                 break;
+            case 't':
+                output_type = optarg;
+                break;
+            default:
+                fprintf(stderr, "\r\n");
         }
     }
     
     // validate input
     if (file_to_parse == NULL) {
-        printf("You must specify a file to parse\r\n");
+        fprintf(stderr, "You must specify a file to parse\r\n");
         return -1;
     }
     if (file_map == NULL) {
-        printf("You must specify a map file.\r\n");
+        fprintf(stderr,"You must specify a map file.\r\n");
         return -1;
     }
     
     // Now open file
     FILE* input_file = fopen(file_to_parse, "r");
     if (input_file == NULL) {
-        printf("Cannot open input file for reading: %s\r\n", file_to_parse);
+        fprintf(stderr, "Cannot open input file for reading: %s\r\n", file_to_parse);
         return -1;
     }
 
     // Now open file
     FILE* map_file = fopen(file_map, "r");
     if (input_file == NULL) {
-        printf("Cannot open map file for reading: %s\r\n", file_to_parse);
+        fprintf(stderr, "Cannot open map file for reading: %s\r\n", file_to_parse);
         return -1;
     }
 
@@ -531,7 +613,7 @@ int main (int argc, char *argv[])
     if (file_read == NULL) { file_read = "default.gtypex"; }
     FILE* output_file = fopen(file_read, "w");
     if (output_file == NULL) {
-        printf("Cannot open output file for writing: %s\r\n", file_read);
+        fprintf(stderr, "Cannot open output file for writing: %s\r\n", file_read);
         return -1;
     }
 
@@ -540,7 +622,9 @@ int main (int argc, char *argv[])
 
     // Parse the map file
     char** snplist;
-    if (parse_map(bin_data, map_file, &snplist) != 0)
+    char* snpref;
+    char* snpalt;
+    if (parse_map(bin_data, map_file, &snplist, &snpref, &snpalt) != 0)
     {
         return -1;
     }
@@ -554,7 +638,11 @@ int main (int argc, char *argv[])
     fclose(input_file);
 
     // Write records to output file
-    write_binary_gt(bin_data, output_file);
+    if (!strcmp(output_type,"vcf")) {
+        write_vcf(bin_data, output_file, snplist, snpref, snpalt);
+    } else {
+        write_binary_gt(bin_data, output_file);
+    }
     
     // Clean up for valgrind
     //for (char **iter = snplist; iter != NULL; )
