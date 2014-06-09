@@ -1,10 +1,37 @@
 /*
  * Genotype TSV to Binary Format converter
  *
- * Copyright Genome Research Limited 2012.
- * All rights reserved.
- * Work in progress, must be released under open license when complete.
- * 
+ * Copyright Genome Research Limited 2012, 2014.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *
+ *     * Neither the name of the Genome Research Limited nor the
+ *       names of its contributors may be used to endorse or promote
+ *       products derived from this software without specific prior
+ *       written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY GRL ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL GRL BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+ * OF THE POSSIBILITY OF SUCH DAMAGE. 
+ *
  * Author: Martin Pollard
  *         <mp15@sanger.ac.uk>
  * Created: 2012-09-21
@@ -324,7 +351,7 @@ int parse_map(struct binary_format* bin_data, FILE* map_file, char*** snplist) {
     }
 
     if (ferror(map_file) != 0) {
-        printf("Error reading map file\r\n");
+        printf("Error reading map file\n");
         return -1;
     }
     
@@ -379,7 +406,7 @@ int parse_input(struct binary_format* bin_data, FILE* input_file, char** snplist
         if (field_count == 8) {fp = lp;} // Save the position of the first SNP txt
     }
     if (field_count < 8 || *fp == '\0') {
-        printf("Not enough fields in header.\r\n");
+        printf("Not enough fields in header.\n");
         return -1;
     }
     fp++; // Move on from the tab
@@ -390,7 +417,7 @@ int parse_input(struct binary_format* bin_data, FILE* input_file, char** snplist
     for (int i = 0; i < bin_data->num_sites; ++i) {
         if (snpid == NULL)
         {
-            printf("invalid input file header\r\n");
+            printf("invalid input file header hit NULL whilst i = %d bin_data->num_sites = %d \n", i, bin_data->num_sites);
             return -1;
         }
         inDirection[i] = getChrPosArray(snplist, snpid);
@@ -468,7 +495,7 @@ int parse_input(struct binary_format* bin_data, FILE* input_file, char** snplist
     }
     
     if (ferror(input_file) != 0) {
-        printf("Error reading input file\r\n");
+        printf("Error reading input file\n");
         return -1;
     }
     return 0;
@@ -505,25 +532,25 @@ int main (int argc, char *argv[])
     
     // validate input
     if (file_to_parse == NULL) {
-        printf("You must specify a file to parse\r\n");
+        printf("You must specify a file to parse\n");
         return -1;
     }
     if (file_map == NULL) {
-        printf("You must specify a map file.\r\n");
+        printf("You must specify a map file.\n");
         return -1;
     }
     
     // Now open file
     FILE* input_file = fopen(file_to_parse, "r");
     if (input_file == NULL) {
-        printf("Cannot open input file for reading: %s\r\n", file_to_parse);
+        printf("Cannot open input file for reading: %s\n", file_to_parse);
         return -1;
     }
 
     // Now open file
     FILE* map_file = fopen(file_map, "r");
     if (input_file == NULL) {
-        printf("Cannot open map file for reading: %s\r\n", file_to_parse);
+        printf("Cannot open map file for reading: %s\n", file_to_parse);
         return -1;
     }
 
@@ -531,7 +558,7 @@ int main (int argc, char *argv[])
     if (file_read == NULL) { file_read = "default.gtypex"; }
     FILE* output_file = fopen(file_read, "w");
     if (output_file == NULL) {
-        printf("Cannot open output file for writing: %s\r\n", file_read);
+        printf("Cannot open output file for writing: %s\n", file_read);
         return -1;
     }
 
